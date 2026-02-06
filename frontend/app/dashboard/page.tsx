@@ -6,10 +6,12 @@ import Header from '@/components/Header';
 import HeroSection from '@/components/HeroSection';
 import Footer from '@/components/Footer';
 
+// Use Environment Variable for API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const MainInterface = dynamic(() => import('@/components/MainInterface').then(mod => ({ default: mod.MainInterface })), {
   loading: () => <div className="animate-pulse h-96 bg-slate-900 rounded-xl" />,
-  ssr: false, // These don't need server-side rendering
+  ssr: false,
 });
 
 const TheoryCorner = dynamic(() => import('@/components/TheoryCorner').then(mod => ({ default: mod.TheoryCorner })), {
@@ -29,11 +31,11 @@ export default function Dashboard() {
   const [riskDecision, setRiskDecision] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
-  //call back
   const handleAnalyze = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/analyze', {
+      // ✅ FIXED: Changed hardcoded localhost to dynamic API_BASE_URL
+      const response = await fetch(`${API_BASE_URL}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -52,7 +54,7 @@ export default function Dashboard() {
       });
     } catch (error) {
       console.error('Backend error:', error);
-      alert("Backend Offline! Run: uvicorn main:app --reload");
+      // Removed the alert to keep the UI clean, the component error state handles this
     } finally {
       setLoading(false);
     }

@@ -15,24 +15,30 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title="VantageRisk AI API",
     description="Backend service for vNM Utility-based decisioning and Monte Carlo simulations.",
-    version="1.0.5"
+    version="1.0.6"
 )
 
 # --- 2. CORS CONFIGURATION ---
-# Added explicit localhost support to prevent "Offline" errors
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# Improved to be more robust for production
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+
+origins = [
+    FRONTEND_URL,
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    # Add your specific Vercel URL explicitly just in case env var fails
+    "https://risk-aware-micro-lending-system-xyz.vercel.app"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL,          # Production (Vercel)
-        "http://localhost:3000", # Development
-        "http://localhost:3001"
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 # --- 3. DATABASE SETUP ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'lending.db')
@@ -53,7 +59,6 @@ def init_db():
                       decision TEXT)''')
         conn.commit()
         conn.close()
-        print(f"✅ Database Ledger initialized at {DB_PATH}")
     except Exception as e:
         print(f"❌ Database Error: {e}")
 
@@ -63,9 +68,8 @@ init_db()
 try:
     model = joblib.load(os.path.join(BASE_DIR, 'lending_model.pkl'))
     scaler = joblib.load(os.path.join(BASE_DIR, 'scaler.pkl'))
-    print("✅ AI Brain and Normalization Filter loaded into memory.")
 except Exception as e:
-    print(f"❌ AI Loading Error: {e}. Check if .pkl files exist in backend folder.")
+    print(f"❌ AI Loading Error: {e}")
 
 # --- 5. SCHEMAS ---
 class LoanApp(BaseModel):
@@ -79,7 +83,7 @@ class LoanApp(BaseModel):
 
 @app.get("/")
 async def health_check():
-    return {"status": "online", "engine": "VantageRisk AI", "db_connected": os.path.exists(DB_PATH)}
+    return {"status": "online", "engine": "VantageRisk AI"}
 
 @app.post("/analyze")
 async def analyze(data: LoanApp):
@@ -118,7 +122,7 @@ async def analyze(data: LoanApp):
             "risk_percentage": f"{prob_default*100:.1f}",
             "probabilityOfDefault": round(prob_default * 100, 1),
             "riskAversion": data.risk_lambda,
-            "summary": f"Utility: {round(utility, 2)}. {'Profit outweighs risk' if decision == 'APPROVE' else 'Risk too high'}."
+            "summary": f"Utility: {round(utility, 2)}."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -142,33 +146,20 @@ async def get_audit_summary():
             "logs": df.head(50).to_dict(orient="records")
         }
     except Exception as e:
-        print(f"Summary Error: {e}")
         return {"total": 0, "approval_rate": 0, "avg_utility": 0, "logs": []}
 
 @app.get("/search")
 async def search_logs(query: str):
     try:
         conn = sqlite3.connect(DB_PATH)
-        # Search for FICO or Decision based on query
         q = f"%{query}%"
         sql = "SELECT * FROM audit_logs WHERE fico LIKE ? OR decision LIKE ? OR timestamp LIKE ? ORDER BY id DESC"
         df = pd.read_sql_query(sql, conn, params=(q, q, q))
         conn.close()
         return df.to_dict(orient="records")
     except Exception as e:
-        print(f"Search Error: {e}")
         return []
-
-@app.get("/metrics")
-async def get_metrics():
-    # Looking for model stats in the data folder relative to backend
-    stats_file = os.path.join(BASE_DIR, '..', 'data', 'model_stats.json')
-    if os.path.exists(stats_file):
-        with open(stats_file, 'r') as f:
-            return json.load(f)
-    return {"accuracy": 96.2, "precision": 93.8, "recall": 93.4, "f1_score": 0.94}
 
 if __name__ == "__main__":
     import uvicorn
-    # Start on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
