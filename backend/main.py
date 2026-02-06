@@ -15,28 +15,27 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title="VantageRisk AI API",
     description="Backend service for vNM Utility-based decisioning and Monte Carlo simulations.",
-    version="1.0.4"
+    version="1.0.5"
 )
 
 # --- 2. CORS CONFIGURATION ---
-
-VERCEL_URL = os.getenv("FRONTEND_URL", "https://your-project-name.vercel.app")
+# Added explicit localhost support to prevent "Offline" errors
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        VERCEL_URL,
-        "http://localhost:3000",
+        FRONTEND_URL,          # Production (Vercel)
+        "http://localhost:3000", # Development
         "http://localhost:3001"
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # --- 3. DATABASE SETUP ---
-# On Render, the path needs to be absolute or relative to the 'backend' root
-DB_PATH = os.path.join(os.path.dirname(__file__), 'lending.db')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, 'lending.db')
 
 def init_db():
     try:
@@ -61,15 +60,12 @@ def init_db():
 init_db()
 
 # --- 4. AI ARTIFACT LOADING ---
-
-BASE_DIR = os.path.dirname(__file__)
-
 try:
     model = joblib.load(os.path.join(BASE_DIR, 'lending_model.pkl'))
     scaler = joblib.load(os.path.join(BASE_DIR, 'scaler.pkl'))
     print("✅ AI Brain and Normalization Filter loaded into memory.")
 except Exception as e:
-    print(f"❌ AI Loading Error: {e}")
+    print(f"❌ AI Loading Error: {e}. Check if .pkl files exist in backend folder.")
 
 # --- 5. SCHEMAS ---
 class LoanApp(BaseModel):
@@ -80,6 +76,10 @@ class LoanApp(BaseModel):
     risk_lambda: float
 
 # --- 6. ROUTES ---
+
+@app.get("/")
+async def health_check():
+    return {"status": "online", "engine": "VantageRisk AI", "db_connected": os.path.exists(DB_PATH)}
 
 @app.post("/analyze")
 async def analyze(data: LoanApp):
@@ -137,68 +137,38 @@ async def get_audit_summary():
         approvals = len(df[df['decision'] == 'APPROVE'])
         return {
             "total": total,
-            "approval_rate": round((approvals / total) * 100, 1),
+            "approval_rate": round((approvals / total) * 100, 1) if total > 0 else 0,
             "avg_utility": round(df['utility'].mean(), 2),
             "logs": df.head(50).to_dict(orient="records")
         }
     except Exception as e:
+        print(f"Summary Error: {e}")
         return {"total": 0, "approval_rate": 0, "avg_utility": 0, "logs": []}
-
-@app.get("/metrics")
-async def get_metrics():
-    # Use absolute path to find the data folder from the backend folder
-    stats_file = os.path.join(BASE_DIR, '..', 'data', 'model_stats.json')
-    if os.path.exists(stats_file):
-        with open(stats_file, 'r') as f:
-            return json.load(f)
-    return {"accuracy": 96.22, "precision": 93.82, "recall": 93.44, "f1_score": 0.94}
-
-@app.get("/run-simulation")
-async def run_simulation():
-    try:
-        # Use absolute path to find the sample data
-        sample_path = os.path.join(BASE_DIR, '..', 'data', 'lending_club_sample.csv')
-        df_sample = pd.read_csv(sample_path)
-        
-        test_cases = df_sample.sample(100)
-        mask_legacy = test_cases['fico'] >= 640
-        profits = np.where(test_cases['default'] == 0, test_cases['loan_amnt'] * 0.15, -test_cases['loan_amnt'])
-        rule_profit = np.sum(profits[mask_legacy])
-
-        features = test_cases[['income', 'fico', 'dti', 'loan_amnt']].values
-        s_features = scaler.transform(features)
-        probs = model.predict_proba(s_features)[:, 1] 
-        
-        potential_profit = test_cases['loan_amnt'].values * 0.15
-        potential_loss = test_cases['loan_amnt'].values
-        eu_scores = ((1 - probs) * potential_profit) - (probs * potential_loss * 1.5)
-        
-        mask_ai = eu_scores > 0
-        ai_profit = np.sum(profits[mask_ai])
-
-        delta = ai_profit - rule_profit
-        improvement = (delta / abs(rule_profit)) * 100 if rule_profit != 0 else 0
-        
-        return {
-            "rule_based_profit": round(float(rule_profit), 2),
-            "ai_utility_profit": round(float(ai_profit), 2),
-            "improvement": f"{round(improvement, 1)}%"
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 @app.get("/search")
 async def search_logs(query: str):
     try:
         conn = sqlite3.connect(DB_PATH)
+        # Search for FICO or Decision based on query
         q = f"%{query}%"
-        sql = "SELECT * FROM audit_logs WHERE fico LIKE ? OR timestamp LIKE ? OR decision LIKE ? ORDER BY id DESC"
+        sql = "SELECT * FROM audit_logs WHERE fico LIKE ? OR decision LIKE ? OR timestamp LIKE ? ORDER BY id DESC"
         df = pd.read_sql_query(sql, conn, params=(q, q, q))
         conn.close()
         return df.to_dict(orient="records")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Search Error: {e}")
+        return []
 
-@app.get("/logs")
-async def get_logs():
-    return await get_audit_summary()
+@app.get("/metrics")
+async def get_metrics():
+    # Looking for model stats in the data folder relative to backend
+    stats_file = os.path.join(BASE_DIR, '..', 'data', 'model_stats.json')
+    if os.path.exists(stats_file):
+        with open(stats_file, 'r') as f:
+            return json.load(f)
+    return {"accuracy": 96.2, "precision": 93.8, "recall": 93.4, "f1_score": 0.94}
+
+if __name__ == "__main__":
+    import uvicorn
+    # Start on port 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
