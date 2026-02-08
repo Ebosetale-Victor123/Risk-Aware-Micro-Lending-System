@@ -19,9 +19,11 @@ Browser: Chrome, Edge, or Firefox (Latest versions).
 3. Installation Guide
 Step 1: Backend Setup
 Open your terminal and navigate to the /backend directory.
-Install the required AI and API libraries:
+Create and activate a virtual environment:
 code
 Bash
+python -m venv venv
+source venv/bin/activate
 pip install pandas scikit-learn xgboost joblib fastapi uvicorn
 Ensure lending_model.pkl and scaler.pkl are present in this folder.
 
@@ -38,7 +40,7 @@ A. Start the AI Engine (Backend)
 In your backend terminal, run:
 code
 Bash
-uvicorn main:app --reload
+python main.py
 The server will initialize at http://localhost:8000. You can view the API documentation at /docs.
 
 B. Start the User Interface (Frontend)

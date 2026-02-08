@@ -27,7 +27,7 @@ origins = [
     "http://localhost:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3000",
-    # Add your specific Vercel URL explicitly just in case env var fails
+    # Vercel URL 
     "https://risk-aware-micro-lending-system-xyz.vercel.app"
 ]
 

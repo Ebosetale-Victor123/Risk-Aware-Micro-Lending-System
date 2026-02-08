@@ -27,14 +27,9 @@ The backend runs on FastAPI and handles risk scoring, utility calculations, and 
     cd backend
     ```
 
-2.  (Optional but Recommended) Create a virtual environment to isolate dependencies:
+2.  Create a virtual environment to isolate dependencies:
     ```bash
     python -m venv venv
-    
-    # Activate on Windows:
-    .\venv\Scripts\activate
-    
-    # Activate on Mac/Linux:
     source venv/bin/activate
     ```
 
@@ -45,7 +40,7 @@ The backend runs on FastAPI and handles risk scoring, utility calculations, and 
 
 4.  Start the Backend Server:
     ```bash
-    uvicorn main:app --reload
+    python main.py
     ```
     *   The server will start at `http://localhost:8000`.
     *   API Documentation is available at `http://localhost:8000/docs`.
