@@ -54,7 +54,7 @@ export default function LoginPage() {
             {/* Officer Identity */}
             <div className="space-y-2">
               <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                Officer Identity
+                Officer Identity (Any Email)
               </Label>
               <div className="relative">
                 <User className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
@@ -70,7 +70,7 @@ export default function LoginPage() {
             {/* Access Key */}
             <div className="space-y-2">
               <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">
-                Access Key
+                Access Key (Any Email)
               </Label>
               <div className="relative">
                 <Lock className="absolute left-4 top-3.5 w-4 h-4 text-slate-500" />
